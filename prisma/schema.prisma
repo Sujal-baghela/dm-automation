@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String               @id @default(cuid())
+  email               String               @unique
+  name                String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  platformConnections PlatformConnection[]
+  workflows           Workflow[]
+  auditLogs           AuditLog[]
+}
+
+model PlatformConnection {
+  id          String    @id @default(cuid())
+  userId      String
+  platform    String
+  accountId   String    @unique
+  accessToken String    @db.Text
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([platform, accountId])
+}
+
+model Workflow {
+  id        String    @id @default(cuid())
+  userId    String
+  name      String
+  isActive  Boolean   @default(true)
+  platforms String[]
+  nodes     Json
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  triggers  Trigger[]
+}
+
+model Trigger {
+  id         String   @id @default(cuid())
+  workflowId String
+  type       String
+  pattern    String?  @db.Text
+  platform   String?
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId, type, platform])
+}
+
+model Conversation {
+  id               String    @id @default(cuid())
+  platform         String
+  externalId       String
+  lastMessageAt    DateTime
+  sessionExpiresAt DateTime?
+  status           String    @default("active")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  messages         Message[]
+
+  @@unique([platform, externalId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  direction      String
+  content        String       @db.Text
+  templateName   String?
+  sentAt         DateTime     @default(now())
+  status         String       @default("pending")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, sentAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
