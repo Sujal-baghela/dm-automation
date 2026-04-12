@@ -4,16 +4,18 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "worker": "tsx watch src/worker.ts",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push",
+    "worker:prod": "tsx src/worker.ts",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "test:webhook:ig": "tsx scripts/test-webhook.ts instagram",
     "test:webhook:wa": "tsx scripts/test-webhook.ts whatsapp"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
