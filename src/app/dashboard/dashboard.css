@@ -380,3 +380,15 @@ body {
 .plat-pill.sel-ig { background: rgba(225,48,108,.08); border-color: #e1306c; color: #c1185b; font-weight: 600; }
 .plat-pill:disabled { opacity: .4; cursor: not-allowed; }
 .char-count { font-size: 11px; color: var(--silver-blue); text-align: right; margin-top: 5px; }
+
+/* ── SKELETON ── */
+.skeleton {
+  background: var(--surface);
+  border-radius: var(--r);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1; }
+}

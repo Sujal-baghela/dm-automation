@@ -1,3 +1,4 @@
+import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 
@@ -6,7 +7,6 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code")
   const error = searchParams.get("error")
 
-  // Handle OAuth callback errors
   if (error) {
     const errorDescription = searchParams.get("error_description") || error
     return NextResponse.redirect(
@@ -14,7 +14,6 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // Step 1: Start OAuth flow if no code
   if (!code) {
     const clientId = process.env.GOOGLE_CLIENT_ID
     const redirectUri = process.env.GOOGLE_REDIRECT_URI
@@ -22,10 +21,7 @@ export async function GET(request: NextRequest) {
 
     if (!clientId || !redirectUri) {
       return NextResponse.redirect(
-        new URL(
-          `/auth/error?msg=${encodeURIComponent("Missing OAuth configuration")}`,
-          request.url
-        )
+        new URL(`/auth/error?msg=${encodeURIComponent("Missing OAuth configuration")}`, request.url)
       )
     }
 
@@ -41,8 +37,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(authUrl.toString())
   }
 
-  // Step 2: Exchange code for access token
   try {
+    const { userId } = await auth()
+
+    if (!userId) {
+      return NextResponse.redirect(
+        new URL(`/auth/error?msg=${encodeURIComponent("Not logged in")}`, request.url)
+      )
+    }
+
     const clientId = process.env.GOOGLE_CLIENT_ID
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET
     const redirectUri = process.env.GOOGLE_REDIRECT_URI
@@ -53,9 +56,7 @@ export async function GET(request: NextRequest) {
 
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code,
@@ -66,22 +67,18 @@ export async function GET(request: NextRequest) {
     })
 
     if (!tokenResponse.ok) {
-      const error = await tokenResponse.text()
-      throw new Error(`Token exchange failed: ${error}`)
+      const err = await tokenResponse.text()
+      throw new Error(`Token exchange failed: ${err}`)
     }
 
     const tokenData = await tokenResponse.json()
     const { access_token, expires_in, refresh_token } = tokenData
 
-    if (!access_token) {
-      throw new Error("No access token in response")
-    }
+    if (!access_token) throw new Error("No access token in response")
 
-    // Step 3: Fetch YouTube channel
     const channelResponse = await fetch(
       "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",
       {
-        method: "GET",
         headers: {
           Authorization: `Bearer ${access_token}`,
           "Content-Type": "application/json",
@@ -90,18 +87,15 @@ export async function GET(request: NextRequest) {
     )
 
     if (!channelResponse.ok) {
-      const error = await channelResponse.text()
-      throw new Error(`Channel fetch failed: ${error}`)
+      const err = await channelResponse.text()
+      throw new Error(`Channel fetch failed: ${err}`)
     }
 
     const channelData = await channelResponse.json()
     const channelId = channelData.items?.[0]?.id
 
-    if (!channelId) {
-      throw new Error("No YouTube channel found")
-    }
+    if (!channelId) throw new Error("No YouTube channel found")
 
-    // Step 4: Upsert account to Prisma
     const expiresAt = new Date(Date.now() + expires_in * 1000)
 
     await prisma.account.upsert({
@@ -117,6 +111,7 @@ export async function GET(request: NextRequest) {
         expiresAt,
       },
       create: {
+        userId,
         platform: "youtube",
         externalId: channelId,
         accessToken: access_token,
@@ -125,11 +120,9 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    // Step 5: Redirect to dashboard
-    return NextResponse.redirect(new URL("/dashboard", request.url))
+    return NextResponse.redirect(new URL("/dashboard/accounts", request.url))
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Authentication failed"
+    const message = err instanceof Error ? err.message : "Authentication failed"
     return NextResponse.redirect(
       new URL(`/auth/error?msg=${encodeURIComponent(message)}`, request.url)
     )

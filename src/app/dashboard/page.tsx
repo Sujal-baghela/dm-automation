@@ -1,10 +1,155 @@
 // src/app/dashboard/page.tsx
-import { prisma } from "@/lib/prisma";
-import Link from "next/link";
+import { cookies } from "next/headers"
+import Link from "next/link"
 
-export const dynamic = "force-dynamic";
+import { prisma } from "@/lib/prisma"
+
+export const dynamic = "force-dynamic"
+
+const PLATFORM_EMOJI: Record<string, string> = {
+  instagram: "📸",
+  whatsapp: "💬",
+  linkedin: "💼",
+  youtube: "🎥",
+  gmb: "📍",
+}
+
+async function getMode(): Promise<"dm" | "social"> {
+  const cookieStore = await cookies()
+  const cookieMode = cookieStore.get("dashboardMode")?.value
+  return cookieMode === "social" ? "social" : "dm"
+}
+
+function previewCaption(value: string): string {
+  if (value.length <= 80) return value
+  return `${value.slice(0, 80)}...`
+}
+
+function formatDateTime(value: Date | null): string {
+  if (!value) return "-"
+  return new Date(value).toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
 
 export default async function DashboardPage() {
+  const mode = await getMode()
+
+  if (mode === "social") {
+    const [posts, connectedPlatforms] = await Promise.all([
+      prisma.post.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        include: { platformPosts: true },
+      }),
+      prisma.account.findMany({
+        select: { platform: true },
+        distinct: ["platform"],
+      }),
+    ])
+
+    const publishedPostsCount = await prisma.post.count({ where: { status: "published" } })
+    const scheduledPostsCount = await prisma.post.count({ where: { status: "scheduled" } })
+    const totalReach = publishedPostsCount * 1200
+
+    return (
+      <>
+        <div className="topbar">
+          <div>
+            <div className="page-title">Dashboard</div>
+            <div className="page-sub">Social publishing overview</div>
+          </div>
+          <div className="topbar-actions">
+            <Link href="/dashboard/compose" className="btn btn-gray btn-sm">✏️ Compose</Link>
+            <Link href="/dashboard/calendar" className="btn btn-primary btn-sm">🗓️ Calendar</Link>
+          </div>
+        </div>
+
+        <div className="content">
+          <div className="stats-row">
+            <div className="stat-card">
+              <div className="stat-label">Posts published</div>
+              <div className="stat-val" style={{ color: "var(--green)" }}>{publishedPostsCount}</div>
+              <div className="stat-delta delta-up">successful publishes</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Scheduled posts</div>
+              <div className="stat-val" style={{ color: "var(--warn)" }}>{scheduledPostsCount}</div>
+              <div className="stat-delta delta-neutral">queued for later</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Platforms connected</div>
+              <div className="stat-val" style={{ color: "var(--purple)" }}>{connectedPlatforms.length}</div>
+              <div className="stat-delta delta-neutral">across publishing channels</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Total reach</div>
+              <div className="stat-val">{totalReach}</div>
+              <div className="stat-delta delta-neutral">estimated from published posts</div>
+            </div>
+          </div>
+
+          <div className="two-col">
+            <div className="card">
+              <div className="card-head">
+                <div className="card-title">Recent posts</div>
+                <Link href="/dashboard/analytics" className="btn btn-gray btn-sm">See analytics</Link>
+              </div>
+              {posts.length === 0 ? (
+                <div style={{ padding: "24px 20px", color: "var(--silver-blue)", fontSize: 13 }}>
+                  No posts yet. <Link href="/dashboard/compose" style={{ color: "var(--purple)" }}>Create your first post →</Link>
+                </div>
+              ) : (
+                posts.map((post) => (
+                  <div className="wf-row" key={post.id}>
+                    <div className="wf-icon" style={{ background: "var(--green-subtle)" }}>📝</div>
+                    <div style={{ flex: 1 }}>
+                      <div className="wf-name">{previewCaption(post.caption)}</div>
+                      <div className="wf-meta">
+                        {post.platformPosts.map((platformPost) => (
+                          <span key={platformPost.id} style={{ marginRight: 8 }}>
+                            {PLATFORM_EMOJI[platformPost.platform] ?? "🔗"} {platformPost.platform}
+                          </span>
+                        ))}
+                        · {formatDateTime(post.createdAt)}
+                      </div>
+                    </div>
+                    <div className="wf-right">
+                      <span className={`badge ${post.status === "published" ? "badge-success" : post.status === "scheduled" ? "badge-neutral" : "badge-warn"}`}>
+                        {post.status}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div className="card" style={{ padding: "18px 20px" }}>
+                <div className="card-title" style={{ marginBottom: 13 }}>Quick Actions</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  <Link href="/dashboard/compose" className="btn btn-subtle" style={{ justifyContent: "flex-start", width: "100%" }}>✏️ Compose a post</Link>
+                  <Link href="/dashboard/calendar" className="btn btn-subtle" style={{ justifyContent: "flex-start", width: "100%" }}>🗓️ View calendar</Link>
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: "18px 20px" }}>
+                <div className="card-title" style={{ marginBottom: 13 }}>Social Notes</div>
+                <div style={{ fontSize: 13, color: "var(--silver-blue)", lineHeight: 1.6 }}>
+                  Use the calendar to track scheduled posts and the analytics page to review performance across platforms.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    )
+  }
+
   const [workflows, recentMessages, contacts, logs] = await Promise.all([
     prisma.workflow.findMany({
       include: { triggers: true },
@@ -21,10 +166,10 @@ export default async function DashboardPage() {
       orderBy: { createdAt: "desc" },
       take: 4,
     }),
-  ]);
+  ])
 
-  const activeWorkflows = workflows.filter((w) => w.isActive).length;
-  const todayMessages = recentMessages.length;
+  const activeWorkflows = workflows.filter((w) => w.isActive).length
+  const todayMessages = recentMessages.length
 
   return (
     <>
@@ -86,7 +231,7 @@ export default async function DashboardPage() {
               workflows.map((wf) => (
                 <div className="wf-row" key={wf.id}>
                   <div className="wf-icon" style={{ background: "var(--purple-subtle)" }}>⚡</div>
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <div className="wf-name">{wf.name}</div>
                     <div className="wf-meta">
                       {wf.platforms.join(", ")} · {wf.triggers.length} trigger{wf.triggers.length !== 1 ? "s" : ""}
@@ -143,5 +288,5 @@ export default async function DashboardPage() {
         </div>
       </div>
     </>
-  );
+  )
 }

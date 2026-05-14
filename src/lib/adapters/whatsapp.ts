@@ -1,4 +1,5 @@
-﻿import type { PlatformAdapter, NormalizedMessage, MessageContent } from "./base";
+﻿import type { PlatformAdapter, NormalizedMessage, MessageContent, PostContent, PublishResult } from "./base";
+
 export const WhatsAppAdapter: PlatformAdapter = {
   normalizePayload(payload: any): NormalizedMessage {
     const msg = payload.messages?.[0] || {};
@@ -11,9 +12,16 @@ export const WhatsAppAdapter: PlatformAdapter = {
       isOutbound: false,
     };
   },
-  async sendMessage(externalId: string, content: MessageContent, accountId: string, token: string) {
+
+  async sendMessage(
+    externalId: string,
+    content: MessageContent,
+    accountId: string,
+    token: string
+  ) {
     const url = `https://graph.facebook.com/v20.0/${accountId}/messages`;
     const body: any = { messaging_product: "whatsapp", to: externalId };
+
     if (content.templateName) {
       body.type = "template";
       body.template = { name: content.templateName, language: { code: "en" } };
@@ -23,17 +31,35 @@ export const WhatsAppAdapter: PlatformAdapter = {
     } else {
       throw new Error("WA requires text or templateName");
     }
+
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify(body),
     });
+
     if (!res.ok) {
       const err = await res.json();
-      throw new Error(`WA API ${res.status}: ${err.error?.message || "Unknown"}`);
+      throw new Error(`WA API ${res.status}: ${err.error?.message ?? "Unknown"}`);
     }
   },
+
   getSessionExpiry(lastMessageAt: Date): Date {
     return new Date(lastMessageAt.getTime() + 24 * 60 * 60 * 1000);
+  },
+
+  async publishPost(_accountId: string, _token: string, _content: PostContent): Promise<PublishResult> {
+    throw new Error("WhatsApp does not support post publishing");
+  },
+
+  async deletePost(_postId: string, _token: string): Promise<void> {
+    throw new Error("WhatsApp does not support post deletion");
+  },
+
+  async getPostAnalytics(_postId: string, _token: string): Promise<Record<string, number>> {
+    throw new Error("WhatsApp does not support post analytics");
   },
 };

@@ -1,8 +1,14 @@
 {
+  "framework": "nextjs",
   "crons": [
     {
       "path": "/api/cron/scheduler",
-      "schedule": "* * * * *"
+      "schedule": "0 * * * *"
     }
-  ]
+  ],
+  "functions": {
+    "src/app/api/**": {
+      "maxDuration": 30
+    }
+  }
 }

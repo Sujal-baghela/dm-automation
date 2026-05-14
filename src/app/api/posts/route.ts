@@ -2,22 +2,12 @@ import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 
-function getUserId(): string {
-  const { userId } = auth()
-  return userId ?? ""
-}
-
-
 export async function GET(request: NextRequest) {
   try {
-    const userId = getUserId()
-
+    const { userId } = await auth()
 
     if (!userId) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const posts = await prisma.post.findMany({
@@ -29,23 +19,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(posts)
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to fetch posts"
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = getUserId()
-
+    const { userId } = await auth()
 
     if (!userId) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const body = await request.json()
@@ -78,22 +61,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(post, { status: 201 })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to create post"
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
-    const userId = getUserId()
+    const { userId } = await auth()
 
     if (!userId) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const body = await request.json()
@@ -112,10 +89,7 @@ export async function PATCH(request: NextRequest) {
     if (status !== undefined) updateData.status = status
 
     const post = await prisma.post.update({
-      where: {
-        id: postId,
-        userId,
-      },
+      where: { id: postId, userId },
       data: updateData,
       include: { platformPosts: true },
     })
@@ -123,27 +97,19 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json(post)
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to update post"
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const userId = getUserId()
-
+    const { userId } = await auth()
 
     if (!userId) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const searchParams = request.nextUrl.searchParams
-    const postId = searchParams.get("postId")
+    const postId = request.nextUrl.searchParams.get("postId")
 
     if (!postId) {
       return NextResponse.json(
@@ -151,15 +117,13 @@ export async function DELETE(request: NextRequest) {
         { status: 400 }
       )
     }
+
     await prisma.platformPost.deleteMany({ where: { postId } })
     await prisma.post.delete({ where: { id: postId, userId } })
 
     return new NextResponse(null, { status: 204 })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to delete post"
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

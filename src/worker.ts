@@ -23,7 +23,6 @@ const worker = new Worker<DMJobData>(
     const adapter = ADAPTERS[platform];
     if (!adapter) throw new Error(`Unsupported platform: ${platform}`);
 
-    // Bug 4 fixed: fetch token securely from DB, never from job payload
     const conn = await prisma.platformConnection.findUnique({
       where: { accountId },
       select: { accessToken: true },
@@ -34,7 +33,6 @@ const worker = new Worker<DMJobData>(
     const normalized = adapter.normalizePayload(rawPayload);
     if (normalized.isOutbound) return;
 
-    // 1. Upsert Conversation
     const conv = await prisma.conversation.upsert({
       where: {
         platform_externalId: {
@@ -54,8 +52,6 @@ const worker = new Worker<DMJobData>(
       },
     });
 
-    // 2. Log Inbound Message
-    // Bug 5 fixed: "received" doesn't exist → use "pending"
     await prisma.message.create({
       data: {
         conversationId: conv.id,
@@ -65,7 +61,6 @@ const worker = new Worker<DMJobData>(
       },
     });
 
-    // 3. Match Workflow
     const workflow = await matchTrigger(
       platform,
       normalized.externalId,
@@ -73,7 +68,6 @@ const worker = new Worker<DMJobData>(
     );
     if (!workflow) return;
 
-    // 4. Execute First Action
     const action = (workflow.nodes as any).actions?.[0];
     if (!action) return;
 
@@ -82,7 +76,6 @@ const worker = new Worker<DMJobData>(
         ? { templateName: action.templateName }
         : { text: action.text };
 
-    // WhatsApp 24h session rule
     if (
       platform === "whatsapp" &&
       conv.sessionExpiresAt &&
@@ -94,10 +87,8 @@ const worker = new Worker<DMJobData>(
       );
     }
 
-    // 5. Send Message
     await adapter.sendMessage(normalized.externalId, content, accountId, token);
 
-    // 6. Log Outbound Message
     await prisma.message.create({
       data: {
         conversationId: conv.id,
@@ -110,7 +101,6 @@ const worker = new Worker<DMJobData>(
   {
     connection: redis,
     concurrency: 10,
-    // Bug 7: keep as object (not a raw count) — correct for prod
   }
 );
 

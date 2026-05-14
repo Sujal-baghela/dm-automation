@@ -70,7 +70,7 @@ export default async function AccountsPage() {
           </div>
           <div className="stat-card">
             <div className="stat-label">Expired tokens</div>
-            <div className="stat-val" style={{ color: "var(--warn)" }}
+            <div className="stat-val" style={{ color: "var(--warn)" }}>
               {expiredCount}
             </div>
             <div className="stat-delta delta-neutral">

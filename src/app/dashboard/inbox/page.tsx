@@ -13,7 +13,7 @@ interface InboxMessage {
   createdAt: string;
 }
 
-const PLATFORM_TABS = [
+const ALL_PLATFORM_TABS = [
   { id: "all", label: "All" },
   { id: "instagram", label: "Instagram" },
   { id: "linkedin", label: "LinkedIn" },
@@ -45,12 +45,34 @@ function formatTime(value: string): string {
 
 export default function InboxPage() {
   const [messages, setMessages] = useState<InboxMessage[]>([]);
+  const [mode, setMode] = useState("dm");
   const [selectedPlatform, setSelectedPlatform] = useState("all");
   const [selectedMessage, setSelectedMessage] = useState<InboxMessage | null>(null);
   const [replyText, setReplyText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isSuggestingReply, setIsSuggestingReply] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const savedMode = localStorage.getItem("dashboardMode");
+    if (savedMode === "social") {
+      setMode("social");
+    }
+  }, []);
+
+  useEffect(() => {
+    setSelectedPlatform("all");
+  }, [mode]);
+
+  const PLATFORM_TABS =
+    mode === "dm"
+      ? [
+          { id: "all", label: "All" },
+          { id: "instagram", label: "Instagram" },
+          { id: "whatsapp", label: "WhatsApp" },
+        ]
+      : ALL_PLATFORM_TABS;
 
   useEffect(() => {
     const fetchMessages = async () => {
@@ -101,6 +123,33 @@ export default function InboxPage() {
       });
     } catch {
       // Keep optimistic UI state even if mark-as-read fails server-side.
+    }
+  };
+
+  const handleAiReply = async () => {
+    if (!selectedMessage) return;
+
+    setIsSuggestingReply(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/inbox/ai-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId: selectedMessage.id }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error ?? "Failed to get suggestion");
+      }
+
+      const data = await response.json();
+      setReplyText(data.suggestion);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to get suggestion");
+    } finally {
+      setIsSuggestingReply(false);
     }
   };
 
@@ -275,7 +324,15 @@ export default function InboxPage() {
                     onChange={(event) => setReplyText(event.target.value)}
                     placeholder="Write your reply..."
                   />
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className="btn btn-outlined btn-sm"
+                      onClick={() => void handleAiReply()}
+                      disabled={isSuggestingReply || !selectedMessage}
+                    >
+                      {isSuggestingReply ? "Thinking..." : "✨ AI Reply"}
+                    </button>
                     <button
                       type="button"
                       className="btn btn-primary btn-sm"

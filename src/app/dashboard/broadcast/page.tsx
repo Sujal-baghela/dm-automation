@@ -1,22 +1,135 @@
+"use client"
+
 // src/app/dashboard/broadcast/page.tsx
-import { prisma } from "@/lib/prisma";
+import { useEffect, useState } from "react"
 
-export const dynamic = "force-dynamic";
+import "../dashboard.css"
 
-export default async function BroadcastPage() {
-  const [conversations, recentMessages] = await Promise.all([
-    prisma.conversation.findMany({
-      orderBy: { lastMessageAt: "desc" },
-    }),
-    prisma.message.findMany({
-      orderBy: { sentAt: "desc" },
-      take: 10,
-      include: { conversation: true },
-    }),
-  ]);
+type PlatformId = "instagram" | "whatsapp"
+type SendMode = "now" | "later"
 
-  const igContacts = conversations.filter((c) => c.platform === "instagram");
-  const waContacts = conversations.filter((c) => c.platform === "whatsapp");
+type BroadcastContact = {
+  platform: PlatformId
+  lastMessageAt?: string
+}
+
+type BroadcastMessage = {
+  id: string
+  direction: "inbound" | "outbound"
+  content: string
+  sentAt: string
+  platform?: PlatformId
+}
+
+type ContactsResponse =
+  | BroadcastContact[]
+  | {
+      contacts?: BroadcastContact[]
+      conversations?: BroadcastContact[]
+      recentMessages?: BroadcastMessage[]
+    }
+
+export default function BroadcastPage() {
+  const [contacts, setContacts] = useState<BroadcastContact[]>([])
+  const [recentMessages, setRecentMessages] = useState<BroadcastMessage[]>([])
+  const [selectedPlatform, setSelectedPlatform] = useState<PlatformId>("instagram")
+  const [sendMode, setSendMode] = useState<SendMode>("now")
+  const [message, setMessage] = useState("")
+  const [sendAt, setSendAt] = useState("")
+  const [isSending, setIsSending] = useState(false)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    let isActive = true
+
+    async function loadContacts() {
+      try {
+        const res = await fetch("/api/broadcast/contacts")
+        if (!res.ok) {
+          throw new Error("Failed to load broadcast contacts")
+        }
+
+        const data = (await res.json()) as ContactsResponse
+        const loadedContacts = Array.isArray(data)
+          ? data
+          : Array.isArray(data.contacts)
+            ? data.contacts
+            : Array.isArray(data.conversations)
+              ? data.conversations
+              : []
+        const loadedRecentMessages = Array.isArray(data)
+          ? []
+          : Array.isArray(data.recentMessages)
+            ? data.recentMessages
+            : []
+
+        if (isActive) {
+          setContacts(loadedContacts)
+          setRecentMessages(loadedRecentMessages)
+        }
+      } catch {
+        if (isActive) {
+          setContacts([])
+          setRecentMessages([])
+        }
+      }
+    }
+
+    void loadContacts()
+
+    return () => {
+      isActive = false
+    }
+  }, [])
+
+  const igContacts = contacts.filter((contact) => contact.platform === "instagram")
+  const waContacts = contacts.filter((contact) => contact.platform === "whatsapp")
+  const selectedContactsCount = selectedPlatform === "instagram" ? igContacts.length : waContacts.length
+
+  async function handleSend() {
+    const trimmedMessage = message.trim()
+
+    if (!trimmedMessage) {
+      setErrorMessage("Please enter a message before sending.")
+      setSuccessMessage(null)
+      return
+    }
+
+    if (sendMode === "later" && !sendAt) {
+      setErrorMessage("Choose a date and time for scheduled sending.")
+      setSuccessMessage(null)
+      return
+    }
+
+    setIsSending(true)
+    setErrorMessage(null)
+    setSuccessMessage(null)
+
+    try {
+      const res = await fetch("/api/broadcast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform: selectedPlatform,
+          message: trimmedMessage,
+          sendAt: sendMode === "later" ? sendAt : null,
+        }),
+      })
+
+      const data = (await res.json()) as { error?: string }
+
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to send broadcast")
+      }
+
+      setSuccessMessage(sendMode === "later" ? "Broadcast scheduled successfully." : "Broadcast sent successfully.")
+    } catch (err) {
+      setErrorMessage((err as Error).message)
+    } finally {
+      setIsSending(false)
+    }
+  }
 
   return (
     <>
@@ -37,21 +150,25 @@ export default async function BroadcastPage() {
               <div style={{ marginBottom: 16 }}>
                 <label className="form-label">Send via platform</label>
                 <div className="platform-pills">
-                  <span
-                    className="plat-pill sel-ig"
-                    style={{ cursor: "default" }}
+                  <button
+                    type="button"
+                    className={`plat-pill ${selectedPlatform === "instagram" ? "sel-ig" : ""}`}
+                    onClick={() => setSelectedPlatform("instagram")}
+                    style={{ cursor: "pointer" }}
                   >
                     📸 Instagram ({igContacts.length} contacts)
-                  </span>
-                  <span
-                    className="plat-pill"
+                  </button>
+                  <button
+                    type="button"
+                    className={`plat-pill ${selectedPlatform === "whatsapp" ? "sel-ig" : ""}`}
+                    onClick={() => setSelectedPlatform("whatsapp")}
                     style={{
-                      cursor: "default",
+                      cursor: "pointer",
                       opacity: waContacts.length === 0 ? 0.4 : 1,
                     }}
                   >
                     💬 WhatsApp ({waContacts.length} contacts)
-                  </span>
+                  </button>
                 </div>
               </div>
 
@@ -65,12 +182,13 @@ export default async function BroadcastPage() {
                     fontFamily: "inherit",
                     fontSize: 14,
                   }}
+                  disabled
                 >
                   <option>
-                    All contacts ({conversations.length} people)
+                    {selectedPlatform === "instagram"
+                      ? `Instagram only (${igContacts.length} people)`
+                      : `WhatsApp only (${waContacts.length} people)`}
                   </option>
-                  <option>Instagram only ({igContacts.length} people)</option>
-                  <option>WhatsApp only ({waContacts.length} people)</option>
                 </select>
               </div>
 
@@ -79,30 +197,51 @@ export default async function BroadcastPage() {
                 <textarea
                   className="textarea"
                   placeholder="Write your message here… Keep it short and personal. Example: Hey! We just dropped something new 👀 Reply YES if you want the details"
-                  defaultValue=""
+                  value={message}
+                  onChange={(event) => setMessage(event.target.value)}
                 />
-                <div className="char-count">0 / 1000</div>
+                <div className="char-count">{message.length} / 1000</div>
               </div>
 
               <div style={{ marginBottom: 20 }}>
                 <label className="form-label">When to send</label>
                 <div className="platform-pills">
-                  <span
-                    className="plat-pill sel-ig"
+                  <button
+                    type="button"
+                    className={`plat-pill ${sendMode === "now" ? "sel-ig" : ""}`}
+                    onClick={() => setSendMode("now")}
                     style={{
-                      background: "var(--purple-subtle)",
-                      borderColor: "var(--purple)",
-                      color: "var(--purple)",
-                      cursor: "default",
+                      background: sendMode === "now" ? "var(--purple-subtle)" : undefined,
+                      borderColor: sendMode === "now" ? "var(--purple)" : undefined,
+                      color: sendMode === "now" ? "var(--purple)" : undefined,
+                      cursor: "pointer",
                     }}
                   >
                     Send now
-                  </span>
-                  <span className="plat-pill" style={{ cursor: "default" }}>
+                  </button>
+                  <button
+                    type="button"
+                    className={`plat-pill ${sendMode === "later" ? "sel-ig" : ""}`}
+                    onClick={() => setSendMode("later")}
+                    style={{ cursor: "pointer" }}
+                  >
                     Schedule for later
-                  </span>
+                  </button>
                 </div>
               </div>
+
+              {sendMode === "later" ? (
+                <div style={{ marginBottom: 16 }}>
+                  <label className="form-label">Schedule date and time</label>
+                  <input
+                    className="form-input"
+                    type="datetime-local"
+                    value={sendAt}
+                    onChange={(event) => setSendAt(event.target.value)}
+                    style={{ cursor: "pointer", borderRadius: "var(--r)", fontFamily: "inherit", fontSize: 14 }}
+                  />
+                </div>
+              ) : null}
 
               <div
                 style={{
@@ -121,19 +260,81 @@ export default async function BroadcastPage() {
                 Templates. Instagram has no such restriction.
               </div>
 
+              {successMessage ? (
+                <div
+                  style={{
+                    marginBottom: 12,
+                    background: "rgba(34, 197, 94, 0.1)",
+                    border: "1px solid rgba(34, 197, 94, 0.25)",
+                    color: "var(--green)",
+                    borderRadius: "var(--r-sm)",
+                    padding: "10px 14px",
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {successMessage}
+                </div>
+              ) : null}
+
+              {errorMessage ? (
+                <div
+                  style={{
+                    marginBottom: 12,
+                    background: "rgba(239, 68, 68, 0.1)",
+                    border: "1px solid rgba(239, 68, 68, 0.25)",
+                    color: "var(--danger)",
+                    borderRadius: "var(--r-sm)",
+                    padding: "10px 14px",
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {errorMessage}
+                </div>
+              ) : null}
+
               <div style={{ display: "flex", gap: 10 }}>
                 <button
                   className="btn btn-outlined"
                   style={{ flex: 1, justifyContent: "center" }}
+                  type="button"
                 >
                   Preview
                 </button>
                 <button
                   className="btn btn-primary"
                   style={{ flex: 2, justifyContent: "center" }}
-                  disabled={conversations.length === 0}
+                  disabled={isSending || selectedContactsCount === 0}
+                  type="button"
+                  onClick={() => void handleSend()}
                 >
-                  📣 Send to {conversations.length} contacts
+                  {isSending ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                          <path d="M12 2a10 10 0 1 1-7.07 2.93" opacity="0.25" />
+                          <path d="M12 2a10 10 0 0 1 7.07 2.93" />
+                          <animateTransform
+                            attributeName="transform"
+                            type="rotate"
+                            from="0 12 12"
+                            to="360 12 12"
+                            dur="0.8s"
+                            repeatCount="indefinite"
+                          />
+                        </g>
+                      </svg>
+                      Sending...
+                    </span>
+                  ) : (
+                    `📣 ${sendMode === "later" ? "Schedule" : "Send"} to ${selectedContactsCount} contacts`
+                  )}
                 </button>
               </div>
             </div>
@@ -151,7 +352,7 @@ export default async function BroadcastPage() {
                 "Don't broadcast more than once every 3 days to the same contacts",
               ].map((tip, i) => (
                 <div
-                  key={i}
+                  key={tip}
                   style={{
                     display: "flex",
                     gap: 10,
@@ -181,13 +382,13 @@ export default async function BroadcastPage() {
                   {
                     label: "Instagram",
                     count: igContacts.length,
-                    total: conversations.length,
+                    total: contacts.length,
                     color: "#e1306c",
                   },
                   {
                     label: "WhatsApp",
                     count: waContacts.length,
-                    total: conversations.length,
+                    total: contacts.length,
                     color: "#25d366",
                   },
                 ].map((item) => (
@@ -217,11 +418,10 @@ export default async function BroadcastPage() {
                       <div
                         style={{
                           height: "100%",
-                          width: `${
+                          width:
                             item.total > 0
-                              ? Math.round((item.count / item.total) * 100)
-                              : 0
-                          }%`,
+                              ? `${Math.round((item.count / item.total) * 100)}%`
+                              : "0%",
                           background: item.color,
                           borderRadius: 99,
                         }}
@@ -229,7 +429,7 @@ export default async function BroadcastPage() {
                     </div>
                   </div>
                 ))}
-                {conversations.length === 0 && (
+                {contacts.length === 0 ? (
                   <div
                     style={{
                       fontSize: 13,
@@ -240,7 +440,7 @@ export default async function BroadcastPage() {
                   >
                     No contacts yet — they appear when someone messages your bot
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
 
@@ -286,7 +486,7 @@ export default async function BroadcastPage() {
                         {msg.content.length > 50 ? "…" : ""}
                       </div>
                       <div className="act-time">
-                        {msg.conversation.platform} ·{" "}
+                        {msg.platform ?? "unknown"} ·{" "}
                         {new Date(msg.sentAt).toLocaleTimeString()}
                       </div>
                     </div>
@@ -298,5 +498,5 @@ export default async function BroadcastPage() {
         </div>
       </div>
     </>
-  );
+  )
 }
