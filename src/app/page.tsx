@@ -59,6 +59,7 @@ export default function HomePage() {
 
             <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
               <Link href="/pricing" style={{ fontSize: 14, color: "var(--mute)", textDecoration: "none", transition: "color 0.2s" }}>Pricing</Link>
+              <Link href="/demo" style={{ fontSize: 14, color: "var(--accent-green)", textDecoration: "none", fontWeight: 600 }}>Try Demo</Link>
               <Link href="/sign-in" style={{ fontSize: 14, color: "var(--mute)", textDecoration: "none", transition: "color 0.2s" }}>Sign in</Link>
               <Link href="/sign-up" style={{ background: "var(--ink)", color: "#000000", fontWeight: 600, borderRadius: 8, padding: "8px 16px", fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>Get started free</Link>
             </div>
@@ -87,7 +88,7 @@ export default function HomePage() {
 
             <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 16 }}>
               <Link href="/sign-up" style={{ background: "var(--ink)", color: "#000000", fontWeight: 600, fontSize: 15, padding: "11px 28px", borderRadius: 8, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>Get started free →</Link>
-              <Link href="/dashboard" style={{ background: "transparent", color: "var(--ink)", fontSize: 15, padding: "11px 28px", borderRadius: 8, border: "1px solid var(--hairline-strong)", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>View dashboard</Link>
+              <Link href="/demo" style={{ background: "transparent", color: "var(--ink)", fontSize: 15, padding: "11px 28px", borderRadius: 8, border: "1px solid var(--hairline-strong)", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>View demo →</Link>
             </div>
 
             <p style={{ fontSize: 13, color: "var(--mute)" }}>Free plan · No credit card required</p>

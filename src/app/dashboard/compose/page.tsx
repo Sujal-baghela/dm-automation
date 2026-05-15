@@ -20,6 +20,11 @@ export default function ComposePage() {
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiTopic, setAiTopic] = useState("");
+  const [aiTone, setAiTone] = useState("casual");
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const handleMediaSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -98,6 +103,27 @@ export default function ComposePage() {
       setIsSubmitting(false);
     }
   };
+
+  const handleGenerate = async () => {
+    if (!aiTopic.trim()) { setAiError("Please describe what your post is about."); return; }
+    setIsGenerating(true)
+    setAiError(null)
+    setAiSuggestions([])
+    try {
+      const res = await fetch("/api/ai/caption", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: aiTopic, tone: aiTone }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Failed to generate")
+      setAiSuggestions(data.captions)
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "Generation failed")
+    } finally {
+      setIsGenerating(false)
+    }
+  }
 
   return (
     <>
@@ -199,6 +225,75 @@ export default function ComposePage() {
 
           {/* RIGHT COLUMN */}
           <div>
+              <div className="card" style={{ padding: "22px", marginBottom: "16px" }}>
+                <div className="card-title" style={{ marginBottom: "4px" }}>✨ AI Caption Generator</div>
+                <div className="page-sub" style={{ marginBottom: "14px" }}>Describe your post and get 3 ready-to-use captions</div>
+                
+                <label className="form-label">What's this post about?</label>
+                <input
+                  className="form-input"
+                  style={{ marginBottom: "10px" }}
+                  value={aiTopic}
+                  onChange={(e) => setAiTopic(e.target.value)}
+                  placeholder="e.g. Launching our new pricing plan this Friday"
+                />
+
+                <label className="form-label">Tone</label>
+                <select
+                  className="form-input"
+                  style={{ marginBottom: "12px" }}
+                  value={aiTone}
+                  onChange={(e) => setAiTone(e.target.value)}
+                >
+                  <option value="casual">😊 Casual — friendly and relatable</option>
+                  <option value="professional">💼 Professional — formal thought leadership</option>
+                  <option value="sales">🔥 Sales — persuasive with a CTA</option>
+                </select>
+
+                {aiError && (
+                  <div style={{ fontSize: 12, color: "var(--danger)", marginBottom: 10 }}>{aiError}</div>
+                )}
+
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  style={{ width: "100%", justifyContent: "center", marginBottom: "14px" }}
+                  onClick={handleGenerate}
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? "Generating..." : "✨ Generate captions"}
+                </button>
+
+                {aiSuggestions.length > 0 && (
+                  <div>
+                    <div className="form-label" style={{ marginBottom: 8 }}>Choose one to use:</div>
+                    {aiSuggestions.map((suggestion, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          border: "1px solid var(--border-gray)",
+                          borderRadius: "var(--r-sm)",
+                          padding: "10px 12px",
+                          marginBottom: "8px",
+                          fontSize: 13,
+                          lineHeight: 1.5,
+                          cursor: "pointer",
+                          background: "var(--surface)",
+                        }}
+                      >
+                        <div style={{ marginBottom: 6, color: "var(--near-black)" }}>{suggestion}</div>
+                        <button
+                          type="button"
+                          className="btn btn-gray btn-sm"
+                          onClick={() => { setCaption(suggestion); setAiSuggestions([]); }}
+                        >
+                          Use this →
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             <div className="card" style={{ padding: "22px" }}>
               <div className="card-title" style={{ marginBottom: "16px" }}>
                 Schedule
