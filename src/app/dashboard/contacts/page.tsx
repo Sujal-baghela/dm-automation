@@ -1,14 +1,74 @@
-// src/app/dashboard/contacts/page.tsx
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma"
+import ContactsClient from "./ContactsClient"
 
-export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic"
+
+const HIGH_INTENT = ["price", "cost", "buy", "purchase", "demo", "interested", "order", "how much", "plan", "pricing"]
+
+function computeScore(messages: { direction: string; content: string; sentAt: Date }[], lastMessageAt: Date): number {
+  let score = 0
+
+  const inbound = messages.filter((m) => m.direction === "inbound")
+  const outbound = messages.filter((m) => m.direction === "outbound")
+
+  // +10 per inbound message, max 40
+  score += Math.min(inbound.length * 10, 40)
+
+  // +25 if any inbound message contains high-intent keyword
+  const hasIntent = inbound.some((m) =>
+    HIGH_INTENT.some((kw) => m.content.toLowerCase().includes(kw))
+  )
+  if (hasIntent) score += 25
+
+  // +20 if they replied after an outbound (engagement signal)
+  const repliedBack = outbound.length > 0 && inbound.some((m) =>
+    outbound.some((o) => m.sentAt > o.sentAt)
+  )
+  if (repliedBack) score += 20
+
+  // +10 if last message within 7 days
+  const daysSince = (Date.now() - new Date(lastMessageAt).getTime()) / (1000 * 60 * 60 * 24)
+  if (daysSince <= 7) score += 10
+  // +5 bonus if within 24 hours
+  if (daysSince <= 1) score += 5
+
+  return Math.min(score, 100)
+}
 
 export default async function ContactsPage() {
   const conversations = await prisma.conversation.findMany({
     orderBy: { lastMessageAt: "desc" },
-    include: { messages: { take: 1, orderBy: { sentAt: "desc" } } },
+    include: {
+      messages: {
+        orderBy: { sentAt: "desc" },
+        select: { direction: true, content: true, sentAt: true },
+      },
+    },
     take: 50,
-  });
+  })
+
+  const scored = conversations
+    .map((c) => {
+      const score = computeScore(c.messages, c.lastMessageAt)
+      const scoreLabel: "Hot" | "Warm" | "Cold" =
+        score >= 70 ? "Hot" : score >= 31 ? "Warm" : "Cold"
+      const lastContent =
+        c.messages[0]?.content
+          ? c.messages[0].content.slice(0, 30) + (c.messages[0].content.length > 30 ? "…" : "")
+          : "—"
+      return {
+        id: c.id,
+        externalId: c.externalId,
+        platform: c.platform,
+        status: c.status,
+        lastMessageAt: c.lastMessageAt.toISOString(),
+        messageCount: c.messages.length,
+        lastContent,
+        score,
+        scoreLabel,
+      }
+    })
+    .sort((a, b) => b.score - a.score)
 
   return (
     <>
@@ -19,48 +79,8 @@ export default async function ContactsPage() {
         </div>
       </div>
       <div className="content">
-        <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-          <input className="search-box" placeholder="Search by ID or platform…" />
-          <button className="btn btn-gray btn-sm">Filter by platform</button>
-        </div>
-        <div className="table-wrap">
-          <div className="table-head">
-            <div className="th">Contact ID</div>
-            <div className="th">Platform</div>
-            <div className="th">Status</div>
-            <div className="th">Last active</div>
-            <div className="th">Messages</div>
-          </div>
-          {conversations.length === 0 ? (
-            <div style={{ padding: "24px 20px", color: "var(--silver-blue)", fontSize: 13 }}>
-              No contacts yet — they appear here when someone messages your bot.
-            </div>
-          ) : (
-            conversations.map((c) => (
-              <div className="table-row" key={c.id}>
-                <div>
-                  <div className="contact-name">{c.externalId}</div>
-                  <div className="contact-id">{c.id.slice(0, 12)}…</div>
-                </div>
-                <div className="td">
-                  <span className={`badge ${c.platform === "instagram" ? "badge-ig" : "badge-wa"}`}>
-                    {c.platform}
-                  </span>
-                </div>
-                <div className="td">
-                  <span className={`badge ${c.status === "active" ? "badge-success" : "badge-neutral"}`}>
-                    {c.status}
-                  </span>
-                </div>
-                <div className="td" style={{ color: "var(--silver-blue)" }}>
-                  {new Date(c.lastMessageAt).toLocaleString()}
-                </div>
-                <div className="td">{c.messages.length > 0 ? c.messages[0].content.slice(0, 30) + "…" : "—"}</div>
-              </div>
-            ))
-          )}
-        </div>
+        <ContactsClient contacts={scored} />
       </div>
     </>
-  );
+  )
 }
