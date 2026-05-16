@@ -10,6 +10,12 @@ const PLATFORMS = [
   { id: "gmb", name: "Google Business", emoji: "📍" },
 ];
 
+type RepurposedVersions = {
+  instagram: string;
+  twitter: string;
+  linkedin: string;
+};
+
 export default function ComposePage() {
   const router = useRouter();
 
@@ -20,20 +26,26 @@ export default function ComposePage() {
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // AI Caption Generator state
   const [aiTopic, setAiTopic] = useState("");
   const [aiTone, setAiTone] = useState("casual");
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  // Repurpose state
+  const [isRepurposing, setIsRepurposing] = useState(false);
+  const [repurposeError, setRepurposeError] = useState<string | null>(null);
+  const [repurposed, setRepurposed] = useState<RepurposedVersions | null>(null);
+  const [sourcePlatform, setSourcePlatform] = useState("linkedin");
+
   const handleMediaSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setMediaFile(file);
     const reader = new FileReader();
-    reader.onload = (event) => {
-      setMediaPreview(event.target?.result as string);
-    };
+    reader.onload = (event) => setMediaPreview(event.target?.result as string);
     reader.readAsDataURL(file);
   };
 
@@ -48,34 +60,19 @@ export default function ComposePage() {
   const handleSubmit = async (postNow: boolean) => {
     setError(null);
     setIsSubmitting(true);
-
     try {
-      if (!caption.trim()) {
-        setError("Caption is required");
-        return;
-      }
-
-      if (platforms.length === 0) {
-        setError("Select at least one platform");
-        return;
-      }
+      if (!caption.trim()) { setError("Caption is required"); return; }
+      if (platforms.length === 0) { setError("Select at least one platform"); return; }
 
       let mediaUrl = "";
-
       if (mediaFile) {
         const formData = new FormData();
         formData.append("file", mediaFile);
-
-        const uploadRes = await fetch("/api/media/upload", {
-          method: "POST",
-          body: formData,
-        });
-
+        const uploadRes = await fetch("/api/media/upload", { method: "POST", body: formData });
         if (!uploadRes.ok) {
           const data = await uploadRes.json();
           throw new Error(data.error ?? "Media upload failed");
         }
-
         const uploadData: { url?: string } = await uploadRes.json();
         mediaUrl = uploadData.url ?? "";
       }
@@ -106,24 +103,54 @@ export default function ComposePage() {
 
   const handleGenerate = async () => {
     if (!aiTopic.trim()) { setAiError("Please describe what your post is about."); return; }
-    setIsGenerating(true)
-    setAiError(null)
-    setAiSuggestions([])
+    setIsGenerating(true);
+    setAiError(null);
+    setAiSuggestions([]);
     try {
       const res = await fetch("/api/ai/caption", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic: aiTopic, tone: aiTone }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? "Failed to generate")
-      setAiSuggestions(data.captions)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to generate");
+      setAiSuggestions(data.captions);
     } catch (err) {
-      setAiError(err instanceof Error ? err.message : "Generation failed")
+      setAiError(err instanceof Error ? err.message : "Generation failed");
     } finally {
-      setIsGenerating(false)
+      setIsGenerating(false);
     }
-  }
+  };
+
+  const handleRepurpose = async () => {
+    if (!caption.trim()) {
+      setRepurposeError("Write a caption first, then repurpose it.");
+      return;
+    }
+    setIsRepurposing(true);
+    setRepurposeError(null);
+    setRepurposed(null);
+    try {
+      const res = await fetch("/api/ai/repurpose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caption, sourcePlatform }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Repurposing failed");
+      setRepurposed(data.repurposed as RepurposedVersions);
+    } catch (err) {
+      setRepurposeError(err instanceof Error ? err.message : "Repurposing failed");
+    } finally {
+      setIsRepurposing(false);
+    }
+  };
+
+  const platformEmoji: Record<string, string> = {
+    instagram: "📸",
+    twitter: "🐦",
+    linkedin: "💼",
+  };
 
   return (
     <>
@@ -141,17 +168,7 @@ export default function ComposePage() {
             {/* Media Upload */}
             <label
               htmlFor="media-input"
-              style={{
-                display: "block",
-                border: "2px dashed var(--border-gray)",
-                borderRadius: "var(--r-card)",
-                padding: "40px",
-                textAlign: "center",
-                cursor: "pointer",
-                transition: "all .15s",
-                marginBottom: "20px",
-                background: "var(--white)",
-              }}
+              style={{ display: "block", border: "2px dashed var(--border-gray)", borderRadius: "var(--r-card)", padding: "40px", textAlign: "center", cursor: "pointer", transition: "all .15s", marginBottom: "20px", background: "var(--white)" }}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault();
@@ -159,36 +176,20 @@ export default function ComposePage() {
                 if (!file) return;
                 setMediaFile(file);
                 const reader = new FileReader();
-                reader.onload = (event) => {
-                  setMediaPreview(event.target?.result as string);
-                };
+                reader.onload = (event) => setMediaPreview(event.target?.result as string);
                 reader.readAsDataURL(file);
               }}
             >
               {mediaPreview ? (
-                <img
-                  src={mediaPreview}
-                  alt="Preview"
-                  style={{ maxWidth: "100%", maxHeight: "300px", borderRadius: "8px" }}
-                />
+                <img src={mediaPreview} alt="Preview" style={{ maxWidth: "100%", maxHeight: "300px", borderRadius: "8px" }} />
               ) : (
                 <>
                   <div style={{ fontSize: "32px", marginBottom: "12px" }}>📸</div>
-                  <div style={{ fontWeight: 600, marginBottom: "4px", fontSize: "14px" }}>
-                    Upload image or video
-                  </div>
-                  <div style={{ fontSize: "12px", color: "var(--silver-blue)" }}>
-                    Click or drag and drop
-                  </div>
+                  <div style={{ fontWeight: 600, marginBottom: "4px", fontSize: "14px" }}>Upload image or video</div>
+                  <div style={{ fontSize: "12px", color: "var(--silver-blue)" }}>Click or drag and drop</div>
                 </>
               )}
-              <input
-                id="media-input"
-                type="file"
-                accept="image/*,video/*"
-                onChange={handleMediaSelect}
-                style={{ display: "none" }}
-              />
+              <input id="media-input" type="file" accept="image/*,video/*" onChange={handleMediaSelect} style={{ display: "none" }} />
             </label>
 
             {/* Caption */}
@@ -205,7 +206,7 @@ export default function ComposePage() {
             </div>
 
             {/* Platform Selector */}
-            <div>
+            <div style={{ marginBottom: 20 }}>
               <label className="form-label">Platforms</label>
               <div className="platform-pills">
                 {PLATFORMS.map((platform) => (
@@ -221,96 +222,134 @@ export default function ComposePage() {
                 ))}
               </div>
             </div>
+
+            {/* ── Repurpose Card ── */}
+            <div className="card" style={{ padding: "22px" }}>
+              <div className="card-title" style={{ marginBottom: 4 }}>🔁 Repurpose for Other Platforms</div>
+              <div className="page-sub" style={{ marginBottom: 14 }}>
+                Rewrites your caption for Instagram, Twitter/X, and LinkedIn automatically
+              </div>
+
+              <label className="form-label">Original platform</label>
+              <select
+                className="form-input"
+                value={sourcePlatform}
+                onChange={(e) => setSourcePlatform(e.target.value)}
+                style={{ marginBottom: 12, borderRadius: "var(--r)", fontFamily: "inherit", fontSize: 14 }}
+              >
+                <option value="linkedin">💼 LinkedIn</option>
+                <option value="instagram">📸 Instagram</option>
+                <option value="twitter">🐦 Twitter/X</option>
+                <option value="gmb">📍 Google Business</option>
+              </select>
+
+              {repurposeError && (
+                <div style={{ fontSize: 12, color: "var(--danger)", marginBottom: 10 }}>{repurposeError}</div>
+              )}
+
+              <button
+                type="button"
+                className="btn btn-outlined btn-sm"
+                style={{ width: "100%", justifyContent: "center", marginBottom: 14 }}
+                onClick={() => void handleRepurpose()}
+                disabled={isRepurposing}
+              >
+                {isRepurposing ? "Repurposing..." : "🔁 Repurpose caption"}
+              </button>
+
+              {repurposed && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {(Object.entries(repurposed) as [keyof RepurposedVersions, string][]).map(([platform, text]) => (
+                    <div
+                      key={platform}
+                      style={{ border: "1px solid var(--border-gray)", borderRadius: "var(--r-sm)", padding: "10px 12px", background: "var(--surface)" }}
+                    >
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--silver-blue)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+                        {platformEmoji[platform]} {platform}
+                        <span style={{ marginLeft: 6, fontWeight: 400, color: "var(--silver-blue)" }}>
+                          ({text.length} chars)
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 13, color: "var(--near-black)", lineHeight: 1.5, marginBottom: 8 }}>{text}</div>
+                      <button
+                        type="button"
+                        className="btn btn-gray btn-sm"
+                        onClick={() => { setCaption(text); setRepurposed(null); }}
+                      >
+                        Use this →
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* RIGHT COLUMN */}
           <div>
-              <div className="card" style={{ padding: "22px", marginBottom: "16px" }}>
-                <div className="card-title" style={{ marginBottom: "4px" }}>✨ AI Caption Generator</div>
-                <div className="page-sub" style={{ marginBottom: "14px" }}>Describe your post and get 3 ready-to-use captions</div>
-                
-                <label className="form-label">What's this post about?</label>
-                <input
-                  className="form-input"
-                  style={{ marginBottom: "10px" }}
-                  value={aiTopic}
-                  onChange={(e) => setAiTopic(e.target.value)}
-                  placeholder="e.g. Launching our new pricing plan this Friday"
-                />
+            {/* AI Caption Generator */}
+            <div className="card" style={{ padding: "22px", marginBottom: "16px" }}>
+              <div className="card-title" style={{ marginBottom: "4px" }}>✨ AI Caption Generator</div>
+              <div className="page-sub" style={{ marginBottom: "14px" }}>Describe your post and get 3 ready-to-use captions</div>
 
-                <label className="form-label">Tone</label>
-                <select
-                  className="form-input"
-                  style={{ marginBottom: "12px" }}
-                  value={aiTone}
-                  onChange={(e) => setAiTone(e.target.value)}
-                >
-                  <option value="casual">😊 Casual — friendly and relatable</option>
-                  <option value="professional">💼 Professional — formal thought leadership</option>
-                  <option value="sales">🔥 Sales — persuasive with a CTA</option>
-                </select>
+              <label className="form-label">What's this post about?</label>
+              <input
+                className="form-input"
+                style={{ marginBottom: "10px" }}
+                value={aiTopic}
+                onChange={(e) => setAiTopic(e.target.value)}
+                placeholder="e.g. Launching our new pricing plan this Friday"
+              />
 
-                {aiError && (
-                  <div style={{ fontSize: 12, color: "var(--danger)", marginBottom: 10 }}>{aiError}</div>
-                )}
+              <label className="form-label">Tone</label>
+              <select
+                className="form-input"
+                style={{ marginBottom: "12px" }}
+                value={aiTone}
+                onChange={(e) => setAiTone(e.target.value)}
+              >
+                <option value="casual">😊 Casual — friendly and relatable</option>
+                <option value="professional">💼 Professional — formal thought leadership</option>
+                <option value="sales">🔥 Sales — persuasive with a CTA</option>
+              </select>
 
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  style={{ width: "100%", justifyContent: "center", marginBottom: "14px" }}
-                  onClick={handleGenerate}
-                  disabled={isGenerating}
-                >
-                  {isGenerating ? "Generating..." : "✨ Generate captions"}
-                </button>
+              {aiError && <div style={{ fontSize: 12, color: "var(--danger)", marginBottom: 10 }}>{aiError}</div>}
 
-                {aiSuggestions.length > 0 && (
-                  <div>
-                    <div className="form-label" style={{ marginBottom: 8 }}>Choose one to use:</div>
-                    {aiSuggestions.map((suggestion, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          border: "1px solid var(--border-gray)",
-                          borderRadius: "var(--r-sm)",
-                          padding: "10px 12px",
-                          marginBottom: "8px",
-                          fontSize: 13,
-                          lineHeight: 1.5,
-                          cursor: "pointer",
-                          background: "var(--surface)",
-                        }}
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                style={{ width: "100%", justifyContent: "center", marginBottom: "14px" }}
+                onClick={() => void handleGenerate()}
+                disabled={isGenerating}
+              >
+                {isGenerating ? "Generating..." : "✨ Generate captions"}
+              </button>
+
+              {aiSuggestions.length > 0 && (
+                <div>
+                  <div className="form-label" style={{ marginBottom: 8 }}>Choose one to use:</div>
+                  {aiSuggestions.map((suggestion, i) => (
+                    <div key={i} style={{ border: "1px solid var(--border-gray)", borderRadius: "var(--r-sm)", padding: "10px 12px", marginBottom: "8px", fontSize: 13, lineHeight: 1.5, cursor: "pointer", background: "var(--surface)" }}>
+                      <div style={{ marginBottom: 6, color: "var(--near-black)" }}>{suggestion}</div>
+                      <button
+                        type="button"
+                        className="btn btn-gray btn-sm"
+                        onClick={() => { setCaption(suggestion); setAiSuggestions([]); }}
                       >
-                        <div style={{ marginBottom: 6, color: "var(--near-black)" }}>{suggestion}</div>
-                        <button
-                          type="button"
-                          className="btn btn-gray btn-sm"
-                          onClick={() => { setCaption(suggestion); setAiSuggestions([]); }}
-                        >
-                          Use this →
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                        Use this →
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Schedule Card */}
             <div className="card" style={{ padding: "22px" }}>
-              <div className="card-title" style={{ marginBottom: "16px" }}>
-                Schedule
-              </div>
+              <div className="card-title" style={{ marginBottom: "16px" }}>Schedule</div>
 
               {error && (
-                <div
-                  style={{
-                    background: "var(--danger-subtle)",
-                    border: "1px solid var(--danger-border)",
-                    borderRadius: "var(--r-sm)",
-                    padding: "11px 14px",
-                    fontSize: "13px",
-                    color: "var(--danger)",
-                    marginBottom: "16px",
-                  }}
-                >
+                <div style={{ background: "var(--danger-subtle)", border: "1px solid var(--danger-border)", borderRadius: "var(--r-sm)", padding: "11px 14px", fontSize: "13px", color: "var(--danger)", marginBottom: "16px" }}>
                   {error}
                 </div>
               )}
@@ -324,22 +363,10 @@ export default function ComposePage() {
               />
 
               <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-                <button
-                  type="button"
-                  className="btn btn-gray"
-                  style={{ flex: 1, justifyContent: "center" }}
-                  onClick={() => handleSubmit(true)}
-                  disabled={isSubmitting}
-                >
+                <button type="button" className="btn btn-gray" style={{ flex: 1, justifyContent: "center" }} onClick={() => void handleSubmit(true)} disabled={isSubmitting}>
                   Post now
                 </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ flex: 1, justifyContent: "center" }}
-                  onClick={() => handleSubmit(false)}
-                  disabled={isSubmitting}
-                >
+                <button type="button" className="btn btn-primary" style={{ flex: 1, justifyContent: "center" }} onClick={() => void handleSubmit(false)} disabled={isSubmitting}>
                   {isSubmitting ? "Publishing..." : "Schedule"}
                 </button>
               </div>
