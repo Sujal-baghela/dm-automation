@@ -21,6 +21,7 @@ model User {
   mediaFiles         MediaFile[]
   inboxMessages      InboxMessage[]
   insights           ConversationInsight[]
+  broadcastJobs      BroadcastJob[]
 }
 
 model Workflow {
@@ -184,4 +185,19 @@ model ConversationInsight {
 
   @@index([userId, senderId])
   @@index([userId, sentiment])
+}
+
+model BroadcastJob {
+  id        String   @id @default(cuid())
+  userId    String
+  platform  String
+  message   String
+  sendAt    DateTime
+  status    String   @default("pending")
+  sentCount Int      @default(0)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status, sendAt])
 }

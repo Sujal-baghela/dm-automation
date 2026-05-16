@@ -3,6 +3,7 @@ import { InstagramAdapter } from "@/lib/adapters/instagram"
 import { LinkedInAdapter } from "@/lib/adapters/linkedin"
 import { YouTubeAdapter } from "@/lib/adapters/youtube"
 import { GMBAdapter } from "@/lib/adapters/gmb"
+import { WhatsAppAdapter } from "@/lib/adapters/whatsapp"
 
 async function publishToAdapter(
   platform: string,
@@ -37,6 +38,8 @@ async function publishToAdapter(
 
 export async function runScheduler() {
   const now = new Date()
+
+  // ── 1. Existing: publish scheduled posts ──
   const posts = await prisma.post.findMany({
     where: {
       status: "scheduled",
@@ -57,10 +60,7 @@ export async function runScheduler() {
       const platform = pPost.platform
 
       const account = await prisma.account.findFirst({
-        where: {
-          userId: post.userId,
-          platform,
-        },
+        where: { userId: post.userId, platform },
       })
 
       if (!account) {
@@ -68,39 +68,28 @@ export async function runScheduler() {
           where: { id: pPost.id },
           data: { status: "failed", error: "No connected account" },
         })
-
         await prisma.auditLog.create({
           data: {
             userId: post.userId,
             action: "post.failed",
-            metadata: {
-              postId: post.id,
-              platform,
-            },
+            metadata: { postId: post.id, platform },
           },
         })
-
         failed += 1
         continue
       }
 
       try {
         const result = await publishToAdapter(platform, account, post)
-
         await prisma.platformPost.update({
           where: { id: pPost.id },
           data: { status: "published", externalId: result.externalId },
         })
-
         await prisma.auditLog.create({
           data: {
             userId: post.userId,
             action: "post.published",
-            metadata: {
-              postId: post.id,
-              platform,
-              externalId: result.externalId,
-            },
+            metadata: { postId: post.id, platform, externalId: result.externalId },
           },
         })
       } catch (err) {
@@ -109,24 +98,17 @@ export async function runScheduler() {
           where: { id: pPost.id },
           data: { status: "failed", error: message },
         })
-
         await prisma.auditLog.create({
           data: {
             userId: post.userId,
             action: "post.failed",
-            metadata: {
-              postId: post.id,
-              platform,
-              error: message,
-            },
+            metadata: { postId: post.id, platform, error: message },
           },
         })
-
         failed += 1
       }
     }
 
-    // Re-fetch platform posts to evaluate final statuses
     const updatedPlatformPosts = await prisma.platformPost.findMany({ where: { postId: post.id } })
     const allPublished = updatedPlatformPosts.every((pp) => pp.status === "published")
     const anyFailed = updatedPlatformPosts.some((pp) => pp.status === "failed")
@@ -139,5 +121,60 @@ export async function runScheduler() {
     }
   }
 
-  return { processed, failed }
+  // ── 2. NEW: send due broadcast jobs ──
+  const dueJobs = await prisma.broadcastJob.findMany({
+    where: { status: "pending", sendAt: { lte: now } },
+  })
+
+  for (const job of dueJobs) {
+    const connection = await prisma.platformConnection.findFirst({
+      where: { platform: job.platform },
+      select: { accountId: true, accessToken: true },
+    })
+
+    if (!connection) {
+      await prisma.broadcastJob.update({
+        where: { id: job.id },
+        data: { status: "failed" },
+      })
+      continue
+    }
+
+    const conversations = await prisma.conversation.findMany({
+      where: { platform: job.platform },
+      select: { externalId: true },
+    })
+
+    const adapter = job.platform === "instagram" ? InstagramAdapter : WhatsAppAdapter
+    let sent = 0
+
+    for (const convo of conversations) {
+      try {
+        await adapter.sendMessage(
+          convo.externalId,
+          { text: job.message },
+          connection.accountId,
+          connection.accessToken
+        )
+        sent++
+      } catch (err) {
+        console.error(`[scheduler/broadcast] failed for ${convo.externalId}:`, err)
+      }
+    }
+
+    await prisma.broadcastJob.update({
+      where: { id: job.id },
+      data: { status: "sent", sentCount: sent },
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        userId: job.userId,
+        action: `broadcast.scheduled.sent ${job.platform} to ${sent} contacts`,
+        metadata: { jobId: job.id, platform: job.platform, sent },
+      },
+    })
+  }
+
+  return { processed, failed, broadcastJobsSent: dueJobs.length }
 }
