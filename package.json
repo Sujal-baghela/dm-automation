@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^7.3.3",
+    "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^5.22.0",
     "@xyflow/react": "^12.10.2",
     "bullmq": "^5.73.4",

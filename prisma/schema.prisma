@@ -20,6 +20,7 @@ model User {
   posts              Post[]
   mediaFiles         MediaFile[]
   inboxMessages      InboxMessage[]
+  insights           ConversationInsight[]
 }
 
 model Workflow {
@@ -150,18 +151,37 @@ model MediaFile {
 }
 
 model InboxMessage {
-  id         String   @id @default(cuid())
+  id         String               @id @default(cuid())
   userId     String
   platform   String
   externalId String
   senderId   String
   text       String?
   mediaUrl   String?
-  isRead     Boolean  @default(false)
-  isOutbound Boolean  @default(false)
+  isRead     Boolean              @default(false)
+  isOutbound Boolean              @default(false)
   repliedAt  DateTime?
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime             @default(now())
+  tags       String[]             @default([])
+  insight    ConversationInsight?
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, platform, isRead])
+}
+
+model ConversationInsight {
+  id         String        @id @default(cuid())
+  senderId   String
+  userId     String
+  sentiment  String        // "positive" | "neutral" | "negative"
+  intent     String        // "interested" | "price-inquiry" | "support" | "objection" | "casual" | "ready-to-buy"
+  tags       String[]
+  summary    String
+  analyzedAt DateTime      @default(now())
+  messageId  String?       @unique
+  message    InboxMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, senderId])
+  @@index([userId, sentiment])
 }
