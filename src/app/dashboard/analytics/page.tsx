@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
+import HeatmapClient from "./HeatmapClient";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,6 @@ export default async function AnalyticsPage() {
     const platformPosts = posts.flatMap((post) =>
       post.platformPosts.filter((platformPost) => platformPost.platform === platform)
     );
-
     return {
       platform,
       total: platformPosts.length,
@@ -60,6 +60,46 @@ export default async function AnalyticsPage() {
       failed: platformPosts.filter((item) => item.status === "failed").length,
     };
   });
+
+  // ── Heatmap data (server-side, same request) ──
+  const grid: number[][] = Array.from({ length: 7 }, () => new Array(24).fill(0));
+
+  // Published posts
+  for (const post of posts) {
+    if (post.status === "published" && post.publishedAt) {
+      const d = new Date(post.publishedAt);
+      grid[d.getDay()][d.getHours()]++;
+    }
+    if (post.status === "scheduled" && post.scheduledAt) {
+      const d = new Date(post.scheduledAt);
+      grid[d.getDay()][d.getHours()]++;
+    }
+  }
+
+  // Inbox replies
+  const replies = await prisma.inboxMessage.findMany({
+    where: { userId, isOutbound: true },
+    select: { createdAt: true },
+  });
+  for (const reply of replies) {
+    const d = new Date(reply.createdAt);
+    grid[d.getDay()][d.getHours()]++;
+  }
+
+  let maxCount = 0;
+  const slots: { day: number; hour: number; count: number }[] = [];
+  for (let day = 0; day < 7; day++) {
+    for (let hour = 0; hour < 24; hour++) {
+      const count = grid[day][hour];
+      if (count > maxCount) maxCount = count;
+      if (count > 0) slots.push({ day, hour, count });
+    }
+  }
+  slots.sort((a, b) => b.count - a.count);
+  const topSlots = slots.slice(0, 3);
+  const totalActivity = slots.reduce((sum, s) => sum + s.count, 0);
+
+  const heatmapData = { grid, maxCount, topSlots, totalActivity };
 
   return (
     <>
@@ -101,6 +141,9 @@ export default async function AnalyticsPage() {
             <div className="stat-delta delta-neutral">needs attention</div>
           </div>
         </div>
+
+        {/* ── Best Time to Post Heatmap ── */}
+        <HeatmapClient data={heatmapData} />
 
         {posts.length === 0 ? (
           <div className="card" style={{ padding: "40px 20px", textAlign: "center" }}>
@@ -156,7 +199,10 @@ export default async function AnalyticsPage() {
                       <div className="wf-name">{previewCaption(post.caption)}</div>
                       <div className="wf-meta">
                         {post.platformPosts
-                          .map((platformPost) => `${platformMeta[platformPost.platform as (typeof PLATFORMS)[number]]?.emoji ?? "🔗"} ${platformPost.platform}`)
+                          .map(
+                            (platformPost) =>
+                              `${platformMeta[platformPost.platform as (typeof PLATFORMS)[number]]?.emoji ?? "🔗"} ${platformPost.platform}`
+                          )
                           .join(" · ")}
                       </div>
                     </div>
