@@ -223,7 +223,7 @@ export default function ComposePage() {
               </div>
             </div>
 
-            {/* ── Repurpose Card ── */}
+            {/* Repurpose Card */}
             <div className="card" style={{ padding: "22px" }}>
               <div className="card-title" style={{ marginBottom: 4 }}>🔁 Repurpose for Other Platforms</div>
               <div className="page-sub" style={{ marginBottom: 14 }}>
@@ -266,9 +266,7 @@ export default function ComposePage() {
                     >
                       <div style={{ fontSize: 11, fontWeight: 700, color: "var(--silver-blue)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
                         {platformEmoji[platform]} {platform}
-                        <span style={{ marginLeft: 6, fontWeight: 400, color: "var(--silver-blue)" }}>
-                          ({text.length} chars)
-                        </span>
+                        <span style={{ marginLeft: 6, fontWeight: 400 }}>({text.length} chars)</span>
                       </div>
                       <div style={{ fontSize: 13, color: "var(--near-black)", lineHeight: 1.5, marginBottom: 8 }}>{text}</div>
                       <button
@@ -329,7 +327,7 @@ export default function ComposePage() {
                 <div>
                   <div className="form-label" style={{ marginBottom: 8 }}>Choose one to use:</div>
                   {aiSuggestions.map((suggestion, i) => (
-                    <div key={i} style={{ border: "1px solid var(--border-gray)", borderRadius: "var(--r-sm)", padding: "10px 12px", marginBottom: "8px", fontSize: 13, lineHeight: 1.5, cursor: "pointer", background: "var(--surface)" }}>
+                    <div key={i} style={{ border: "1px solid var(--border-gray)", borderRadius: "var(--r-sm)", padding: "10px 12px", marginBottom: "8px", fontSize: 13, lineHeight: 1.5, background: "var(--surface)" }}>
                       <div style={{ marginBottom: 6, color: "var(--near-black)" }}>{suggestion}</div>
                       <button
                         type="button"
