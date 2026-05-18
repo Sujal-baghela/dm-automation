@@ -29,7 +29,7 @@ export async function POST(req: Request) {
       name: string
       platforms: string[]
       isActive: boolean
-      nodes: unknown[]
+      nodes: unknown
       triggers: Array<{ type: string; pattern: string | null; platform: string | null }>
     }
 
