@@ -36,6 +36,10 @@ interface Post {
 export default function CalendarClient({ posts: initialPosts }: { posts: Post[] }) {
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Post | null>(null);
+  const [editCaption, setEditCaption] = useState("");
+  const [editScheduledAt, setEditScheduledAt] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const router = useRouter();
 
   const handleDelete = async (id: string) => {
@@ -48,6 +52,37 @@ export default function CalendarClient({ posts: initialPosts }: { posts: Post[] 
       alert("Failed to delete post");
     } finally {
       setDeleting(null);
+    }
+  };
+
+  const handleEditOpen = (post: Post) => {
+    setEditing(post);
+    setEditCaption(post.caption);
+    setEditScheduledAt(post.scheduledAt ? new Date(post.scheduledAt).toISOString().slice(0, 16) : "");
+  };
+
+  const handleEditSave = async () => {
+    if (!editing) return;
+    setIsSaving(true);
+    try {
+      await fetch(`/api/posts/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          caption: editCaption,
+          scheduledAt: editScheduledAt || null,
+        }),
+      });
+      setPosts((prev) => prev.map((p) =>
+        p.id === editing.id
+          ? { ...p, caption: editCaption, scheduledAt: editScheduledAt || null, status: editScheduledAt ? "scheduled" : "draft" }
+          : p
+      ));
+      setEditing(null);
+    } catch {
+      alert("Failed to save changes");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -69,13 +104,8 @@ export default function CalendarClient({ posts: initialPosts }: { posts: Post[] 
           </span>
         ))}
         <span className={`badge ${statusClass}`}>{statusText}</span>
-        <button
-          type="button"
-          className="btn btn-gray btn-sm"
-          onClick={() => void handleDelete(post.id)}
-          disabled={deleting === post.id}
-          style={{ color: "var(--danger)" }}
-        >
+        <button type="button" className="btn btn-gray btn-sm" onClick={() => handleEditOpen(post)}>Edit</button>
+        <button type="button" className="btn btn-gray btn-sm" onClick={() => void handleDelete(post.id)} disabled={deleting === post.id} style={{ color: "var(--danger)" }}>
           {deleting === post.id ? "Deleting..." : "Delete"}
         </button>
       </div>
@@ -142,6 +172,27 @@ export default function CalendarClient({ posts: initialPosts }: { posts: Post[] 
           </>
         )}
       </div>
+      {editing && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "#fff", borderRadius: "var(--r-card)", padding: 24, width: "100%", maxWidth: 480, display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--near-black)" }}>Edit Post</div>
+            <div>
+              <label className="form-label">Caption</label>
+              <textarea className="textarea" value={editCaption} onChange={(e) => setEditCaption(e.target.value)} style={{ minHeight: 100 }} />
+            </div>
+            <div>
+              <label className="form-label">Schedule for (leave empty for draft)</label>
+              <input type="datetime-local" className="form-input" value={editScheduledAt} onChange={(e) => setEditScheduledAt(e.target.value)} />
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button type="button" className="btn btn-gray btn-sm" onClick={() => setEditing(null)}>Cancel</button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => void handleEditSave()} disabled={isSaving}>
+                {isSaving ? "Saving..." : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
