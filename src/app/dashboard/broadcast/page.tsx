@@ -56,6 +56,7 @@ export default function BroadcastPage() {
   const [isSending, setIsSending] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [showPreview, setShowPreview] = useState(false)
 
   useEffect(() => {
     let isActive = true
@@ -279,26 +280,38 @@ export default function BroadcastPage() {
                   className="btn btn-outlined"
                   style={{ flex: 1, justifyContent: "center" }}
                   type="button"
-                  onClick={() => {
-                    if (!message.trim()) {
-                      alert("Write a message first to preview it.");
-                      return;
-                    }
-                    alert(`📣 Preview — how your message will look:\n\n"${message.trim()}"\n\nPlatform: ${selectedPlatform}\nRecipients: ${selectedContactsCount} contacts`);
-                  }}
+                  onClick={() => setShowPreview((v) => !v)}
                 >
-                  Preview
+                  {showPreview ? "Hide Preview" : "Preview"}
                 </button>
                 <button
                   className="btn btn-primary"
                   style={{ flex: 2, justifyContent: "center" }}
-                  disabled={isSending || selectedContactsCount === 0}
+                  disabled={isSending || !message.trim() || (sendMode === "later" && !sendAt)}
                   type="button"
                   onClick={() => void handleSend()}
                 >
                   {isSending ? "Sending..." : `📣 ${sendMode === "later" ? "Schedule" : "Send"} to ${selectedContactsCount} contacts`}
                 </button>
               </div>
+              {showPreview && (
+                <div style={{ marginTop: 12, padding: "14px 16px", background: "var(--surface)", border: "1px solid var(--border-gray)", borderRadius: "var(--r-sm)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--silver-blue)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+                    Preview — how your contact sees it
+                  </div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--purple-subtle)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>
+                      {selectedPlatform === "instagram" ? "📸" : "💬"}
+                    </div>
+                    <div style={{ background: "#fff", border: "1px solid var(--border-gray)", borderRadius: "4px 16px 16px 16px", padding: "10px 14px", maxWidth: "80%", fontSize: 13, lineHeight: 1.6, color: "var(--near-black)", whiteSpace: "pre-wrap" }}>
+                      {message.trim() || "Your message will appear here..."}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--silver-blue)", marginTop: 8, textAlign: "right" }}>
+                    Sending to {selectedPlatform} · {sendMode === "later" && sendAt ? `Scheduled for ${formatDateTime(sendAt)}` : "Sending now"}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* ── Scheduled Jobs list ── */}
