@@ -33,7 +33,7 @@ Rules:
 - Twitter: short, punchy, conversational, can use 1-2 hashtags inline`;
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     const result = await model.generateContent(prompt);
     const raw = result.response.text().trim();
     const cleaned = raw.replace(/```json|```/g, "").trim();
