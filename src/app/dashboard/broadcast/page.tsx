@@ -187,6 +187,11 @@ export default function BroadcastPage() {
           <div className="page-title">Broadcast</div>
           <div className="page-sub">Send a message to all your contacts at once</div>
         </div>
+        {scheduledJobs.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", background: "var(--purple-subtle)", border: "1px solid var(--purple)", borderRadius: "var(--r-sm)", fontSize: 13, color: "var(--purple)", fontWeight: 600 }}>
+            📅 {scheduledJobs.length} broadcast{scheduledJobs.length > 1 ? "s" : ""} scheduled
+          </div>
+        )}
       </div>
 
       <div className="content">
@@ -270,7 +275,18 @@ export default function BroadcastPage() {
               )}
 
               <div style={{ display: "flex", gap: 10 }}>
-                <button className="btn btn-outlined" style={{ flex: 1, justifyContent: "center" }} type="button">
+                <button
+                  className="btn btn-outlined"
+                  style={{ flex: 1, justifyContent: "center" }}
+                  type="button"
+                  onClick={() => {
+                    if (!message.trim()) {
+                      alert("Write a message first to preview it.");
+                      return;
+                    }
+                    alert(`📣 Preview — how your message will look:\n\n"${message.trim()}"\n\nPlatform: ${selectedPlatform}\nRecipients: ${selectedContactsCount} contacts`);
+                  }}
+                >
                   Preview
                 </button>
                 <button
