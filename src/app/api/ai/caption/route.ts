@@ -29,37 +29,28 @@ Rules:
 - Return ONLY a JSON array with exactly 3 strings, no other text, no markdown:
 ["caption 1 here","caption 2 here","caption 3 here"]`
 
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ error: "AI not configured" }, { status: 500 })
-    }
+    const apiKey = process.env.GROQ_API_KEY ?? "";
+    if (!apiKey) return NextResponse.json({ error: "AI not configured" }, { status: 500 });
 
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.8, maxOutputTokens: 600 },
-        }),
-      }
-    )
-
-    if (!res.ok) {
-      return NextResponse.json({ error: "AI request failed" }, { status: 500 })
-    }
-
-    const data = await res.json()
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
-    const clean = raw.replace(/```json|```/g, "").trim()
-    const captions = JSON.parse(clean) as string[]
-
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: "llama3-8b-8192",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.8,
+        max_tokens: 600,
+      }),
+    });
+    if (!res.ok) return NextResponse.json({ error: "AI request failed" }, { status: 500 });
+    const data = await res.json();
+    const raw = data.choices?.[0]?.message?.content ?? "";
+    const clean = raw.replace(/```json|```/g, "").trim();
+    const captions = JSON.parse(clean) as string[];
     if (!Array.isArray(captions) || captions.length === 0) {
-      return NextResponse.json({ error: "Invalid AI response" }, { status: 500 })
+      return NextResponse.json({ error: "Invalid AI response" }, { status: 500 });
     }
-
-    return NextResponse.json({ captions })
+    return NextResponse.json({ captions });
   } catch (err) {
     console.error("[ai/caption]", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

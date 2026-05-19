@@ -33,29 +33,28 @@ Rules:
 - Twitter: short, punchy, conversational, can use 1-2 hashtags inline`;
 
   try {
-    const apiKey = process.env.GEMINI_API_KEY ?? "";
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.8, maxOutputTokens: 1000 },
-        }),
-      }
-    );
+    const apiKey = process.env.GROQ_API_KEY ?? "";
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: "llama3-8b-8192",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.8,
+        max_tokens: 1000,
+      }),
+    });
     if (!res.ok) {
       const err = await res.text();
       throw new Error(err);
     }
     const data = await res.json();
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const raw = data.choices?.[0]?.message?.content ?? "";
     const cleaned = raw.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned) as { instagram: string; linkedin: string; twitter: string };
     return NextResponse.json({ repurposed: { instagram: parsed.instagram ?? "", linkedin: parsed.linkedin ?? "", twitter: parsed.twitter ?? "" } });
   } catch (err) {
     console.error("Repurpose error:", err);
-    return NextResponse.json({ error: "AI repurposing failed. Check GEMINI_API_KEY." }, { status: 500 });
+    return NextResponse.json({ error: "AI repurposing failed. Check GROQ_API_KEY." }, { status: 500 });
   }
 }

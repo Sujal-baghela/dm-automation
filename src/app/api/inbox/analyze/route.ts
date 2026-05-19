@@ -46,10 +46,14 @@ Rules:
 - summary: max 15 words, plain English, no jargon`;
 
   try {
-    const apiKey = process.env.GEMINI_API_KEY ?? "";
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
-    const geminiData = await res.json();
-    const raw = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const groqApiKey = process.env.GROQ_API_KEY ?? "";
+    const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${groqApiKey}` },
+      body: JSON.stringify({ model: "llama3-8b-8192", messages: [{ role: "user", content: prompt }], temperature: 0.3, max_tokens: 500 }),
+    });
+    const groqData = await groqRes.json();
+    const raw = groqData.choices?.[0]?.message?.content ?? "";
     const cleaned = raw.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned) as { sentiment: string; intent: string; tags: string[]; summary: string };
 
