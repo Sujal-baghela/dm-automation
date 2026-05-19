@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 
 export async function POST(req: NextRequest) {
   const { userId: clerkId } = await auth();
@@ -50,7 +47,12 @@ Rules:
     const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${groqApiKey}` },
-      body: JSON.stringify({ model: "llama3-8b-8192", messages: [{ role: "user", content: prompt }], temperature: 0.3, max_tokens: 500 }),
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.3,
+        max_tokens: 500,
+      }),
     });
     const groqData = await groqRes.json();
     const raw = groqData.choices?.[0]?.message?.content ?? "";
@@ -83,8 +85,8 @@ Rules:
 
     return NextResponse.json({ insight });
   } catch (err) {
-    console.error("Gemini analyze error:", err);
-    return NextResponse.json({ error: "AI analysis failed. Check GEMINI_API_KEY." }, { status: 500 });
+    console.error("Analyze error:", err);
+    return NextResponse.json({ error: "AI analysis failed. Check GROQ_API_KEY." }, { status: 500 });
   }
 }
 
