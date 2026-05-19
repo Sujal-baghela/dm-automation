@@ -46,9 +46,10 @@ Rules:
 - summary: max 15 words, plain English, no jargon`;
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-    const result = await model.generateContent(prompt);
-    const raw = result.response.text().trim();
+    const apiKey = process.env.GEMINI_API_KEY ?? "";
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
+    const geminiData = await res.json();
+    const raw = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     const cleaned = raw.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned) as { sentiment: string; intent: string; tags: string[]; summary: string };
 

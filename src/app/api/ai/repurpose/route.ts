@@ -33,23 +33,27 @@ Rules:
 - Twitter: short, punchy, conversational, can use 1-2 hashtags inline`;
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-    const result = await model.generateContent(prompt);
-    const raw = result.response.text().trim();
+    const apiKey = process.env.GEMINI_API_KEY ?? "";
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.8, maxOutputTokens: 1000 },
+        }),
+      }
+    );
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err);
+    }
+    const data = await res.json();
+    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     const cleaned = raw.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(cleaned) as {
-      instagram: string;
-      linkedin: string;
-      twitter: string;
-    };
-
-    return NextResponse.json({
-      repurposed: {
-        instagram: parsed.instagram ?? "",
-        linkedin: parsed.linkedin ?? "",
-        twitter: parsed.twitter ?? "",
-      },
-    });
+    const parsed = JSON.parse(cleaned) as { instagram: string; linkedin: string; twitter: string };
+    return NextResponse.json({ repurposed: { instagram: parsed.instagram ?? "", linkedin: parsed.linkedin ?? "", twitter: parsed.twitter ?? "" } });
   } catch (err) {
     console.error("Repurpose error:", err);
     return NextResponse.json({ error: "AI repurposing failed. Check GEMINI_API_KEY." }, { status: 500 });
